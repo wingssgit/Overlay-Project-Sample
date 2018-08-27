@@ -17,16 +17,39 @@ namespace OverlaySample
 		Tazer = 8,
 		C4 = 9
 	}
+
+	
+	[StructLayout(LayoutKind.Sequential)]
+	public struct ViewMatrix
+	{
+		public float m0;
+		public float m1;
+		public float m2;
+		public float m3;
+		public float m4;
+		public float m5;
+		public float m6;
+		public float m7;
+		public float m8;
+		public float m9;
+		public float m10;
+		public float m11;
+		public float m12;
+		public float m13;
+		public float m14;
+		public float m15;
+		
+	}
 	
 
 	[StructLayout(LayoutKind.Sequential)]
 	public class Player
 	{
 		public uint BaseAddress;
-		public int index;
-		public int health;
-		public Vector3 LocationHead;
-		public int distance;
+		public int Index;
+		public int Health;
+		public Vector3 TargetBoneLocation;
+		public int Distance;
 		public int bSpotted;
 		public int bDormant;
 		

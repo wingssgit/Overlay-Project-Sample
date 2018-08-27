@@ -42,7 +42,7 @@ namespace OverlaySample
 				Environment.Exit(0);
 			}
 
-			byte[] modImage = M.Read(G.clientDLL, G.clientSize);
+			/*byte[] modImage = M.Read(G.clientDLL, G.clientSize);
 			Scan Scanner = new Scan(G.clientDLL, modImage, G.clientSize);
 			uint foundAddr = Scanner.FindPattern("A3 ? ? ? ? C7 05 ? ? ? ? ? ? ? ? E8 ? ? ? ? 59 C3 6A");
 			uint localPlayerAdd = M.Read<uint>(foundAddr + 1) + 16;
@@ -55,7 +55,7 @@ namespace OverlaySample
 
 			foundAddr = Scanner.FindPattern("0F 10 05 ? ? ? ? 8D 85 ? ? ? ? B9");
 			uint viewMatrixAdd = M.Read<uint>(foundAddr + 3) + 176;
-			Offsets.dwViewMatrix = viewMatrixAdd - G.clientDLL;
+			Offsets.dwViewMatrix = viewMatrixAdd - G.clientDLL;*/
 
 			G.PlayerList = G.clientDLL + Offsets.dwEntityList;
 

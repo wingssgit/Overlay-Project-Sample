@@ -21,7 +21,7 @@ namespace OverlaySample
 		private WindowRenderTarget device;
 		private HwndRenderTargetProperties renderProperties;
 		private Factory factory;
-		private float[] vmatrix = new float[16];
+		private ViewMatrix viewMatrix = new ViewMatrix();
 		private static Vector2 RecoilCross = new Vector2(0, 0);
 		private static Vector3 AimPunch = new Vector3(0, 0, 0);
 		private static Vector3 VecPunch = new Vector3(0, 0, 0);
@@ -129,9 +129,8 @@ namespace OverlaySample
 				GetWeaponInfo();
 
 				//Get ViewMatrix
-				for (int j = 0; j < 16; j++)
-					vmatrix[j] = M.Read<float>(G.clientDLL + Offsets.dwViewMatrix + ((uint)j * 0x4));
-
+				viewMatrix = M.Read<ViewMatrix>(G.clientDLL + Offsets.dwViewMatrix);
+				
 				//Get Punch Angle
 				VecPunch = M.Read<Vector3>(G.pLocalPlayer + Offsets.VecPunchAngle);
 
@@ -180,10 +179,10 @@ namespace OverlaySample
 							DrawText(distance.ToString() + 'm', (int)screenpos2.X, (int)screenpos2.Y - 5, brushYellow, brushBlack, fontFactory, font);
 						//Set Player info & add to player list
 						player.BaseAddress = pPlayer;
-						player.index = i;
-						player.health = health;
-						player.LocationHead = plr_bone;
-						player.distance = distance;
+						player.Index = i;
+						player.Health = health;
+						player.TargetBoneLocation = plr_bone;
+						player.Distance = distance;
 						player.bSpotted = bSpotted;
 						player.bDormant = dormant;
 						Players.Add(player);
@@ -228,7 +227,7 @@ namespace OverlaySample
 					DrawMenu(400, 400, brushWhite, brushLtGray, brushDarkRed, fontFactory, white, font);
 
 				//Recoil Control
-				if (IsKeyDown(Config.ControlRecoilKey) && G.ShotsFired > 1) //0x4C = L key
+				if (IsKeyDown(Config.ControlRecoilKey) && G.ShotsFired > 1) 
 				{
 					ControlRecoil();
 				}
@@ -257,10 +256,10 @@ namespace OverlaySample
 
 			Player LastTarget = new Player();
 			LastTarget.BaseAddress = 0x1000;
-			LastTarget.index = -1;
-			LastTarget.health = 100;
-			LastTarget.LocationHead = new Vector3(0, 0, 0);
-			LastTarget.distance = 1000;
+			LastTarget.Index = -1;
+			LastTarget.Health = 100;
+			LastTarget.TargetBoneLocation = new Vector3(0, 0, 0);
+			LastTarget.Distance = 1000;
 			LastTarget.bSpotted = 0;
 			LastTarget.bDormant = 0;
 
@@ -271,22 +270,23 @@ namespace OverlaySample
 				
 				if (IsKeyDown(Config.AimKey) && G.Players.Count > 0 && G.MyWeaponType != WeaponType.Knife && G.MyWeaponType != WeaponType.Grenade && G.MyWeaponType != WeaponType.Unknown)//Ctrl = 0x11 Shift = 0x10
 				{
-
 					List<Player> AimTarget = new List<Player>();
-					float bestDist = Config.fov;
-
-
-
+					float bestDist = Config.FOV;
+					
 					foreach (var player in G.Players.ToList())
 					{
 						
-						if (player.health > 0 && player.BaseAddress != 0 && player.bDormant == 0)
+						if (player.Health > 0 && player.BaseAddress != 0 && player.bDormant == 0)
 						{
-							float flDist = DistanceFromCrosshair(player.LocationHead);
+							bool bUseRecoilCrosshair = false;
 
 							if (G.MyWeaponType == WeaponType.Rifle || G.MyWeaponType == WeaponType.Smg)
+							{
 								if (G.ShotsFired > 1)
-									flDist = DistanceFromRecoilCrosshair(player.LocationHead);
+									bUseRecoilCrosshair = true;
+							}
+
+							float flDist = DistanceFromCrosshair(player.TargetBoneLocation, bUseRecoilCrosshair);
 							
 							if (flDist < 0) continue; //target not on screen
 
@@ -323,9 +323,9 @@ namespace OverlaySample
 							velocity.Z = 0; //Disregard Z velocity due to death animation causing wonky Z velocity readings resulting in crazy predictions
 							
 
-							//Predicting for ~13ms to prevent crosshair from lagging behind moving targets
+							//Predicting for (13 * smoothing factor)ms to prevent crosshair from lagging behind moving targets
 							float delay = Config.smooth * 13; 
-							Vector3 predictedLocation = PredictCoords(AimTarget[0].LocationHead, velocity, delay);
+							Vector3 predictedLocation = PredictCoords(AimTarget[0].TargetBoneLocation, velocity, delay);
 
 							if (WorldToScreen(predictedLocation, out Vector2 screenPos))
 							{
@@ -342,7 +342,7 @@ namespace OverlaySample
 										AimPunch = M.Read<Vector3>(G.pLocalPlayer + Offsets.VecPunchAngle);
 										GetAimRecoil(out RecoilCross);
 									}
-									else if (Config.trigger)
+									else if (Config.triggerbot)
 									{
 										AimPunch = M.Read<Vector3>(G.pLocalPlayer + Offsets.VecPunchAngle);
 										GetAimRecoil(out RecoilCross);
@@ -382,13 +382,13 @@ namespace OverlaySample
 								}
 								
 								//Aim at target via mouse movement
-								if (Math.Abs(moveX) >= 1 || Math.Abs(moveY) >= 1)//Only move mouse if distance is 1 pixel or more
+								if (Math.Abs(moveX) >= 1 || Math.Abs(moveY) >= 1)
 									Win32.mouse_event(0x0001, moveX, moveY, 0, 0);
-								else if(Config.trigger)//Fire only if no further movement required & trigger bot enabled
+								else if(Config.triggerbot)
 								{
-									Win32.mouse_event(0x0002, 0, 0, 0, 0);//Send Left Mouse Down input
+									Win32.mouse_event(0x0002, 0, 0, 0, 0);//Left click down
 									Thread.Sleep(10);//Wait like a normal person
-									Win32.mouse_event(0x0004, 0, 0, 0, 0);//Send Left Mouse Up input
+									Win32.mouse_event(0x0004, 0, 0, 0, 0);//Left click up
 								}
 
 								bLastTargetValid = true;
@@ -408,7 +408,7 @@ namespace OverlaySample
 			}
 		}
 
-		public WeaponType GetWeaponType(int WeaponId)
+		private WeaponType GetWeaponType(int WeaponId)
 		{
 			switch (WeaponId)
 			{
@@ -573,36 +573,19 @@ namespace OverlaySample
 					return WeaponType.Unknown;
 			}
 		}
+		
 
-		public float DistanceFromRecoilCrosshair(Vector3 TargetLocation)
+		private float DistanceFromCrosshair(Vector3 TargetLocation, bool bUseRecoilCrosshair = false)
 		{
 			Vector2 Crosshair = new Vector2((windowWidth / 2) + 1, (windowHeight / 2) + 1);
-			float absdistX = Math.Abs(Crosshair.X - RecoilCross.X);
-			float absdistY = Math.Abs(Crosshair.Y - RecoilCross.Y);
 
-			if (absdistX > 1 || absdistY > 1)
-				if (RecoilCross.X != 0 && RecoilCross.Y != 0)
+			if (bUseRecoilCrosshair && RecoilCross.X != 0 && RecoilCross.Y != 0)
+			{
+				if (Math.Abs(Crosshair.X - RecoilCross.X) > 1 || Math.Abs(Crosshair.Y - RecoilCross.Y) > 1)
 					Crosshair = RecoilCross;
-
-			Vector2 ScreenLocation = new Vector2(0f, 0f);
-			if (WorldToScreen(TargetLocation, out ScreenLocation))
-			{
-				float X = ScreenLocation.X > Crosshair.X ? ScreenLocation.X - Crosshair.X : Crosshair.X - ScreenLocation.X;
-				float Y = ScreenLocation.Y > Crosshair.Y ? ScreenLocation.Y - Crosshair.Y : Crosshair.Y - ScreenLocation.Y;
-				return (float)Math.Sqrt((X * X) + (Y * Y));
-			}
-			else
-			{
-				return -1;
 			}
 
-		}
-
-		public float DistanceFromCrosshair(Vector3 TargetLocation)
-		{
-			Vector2 Crosshair = new Vector2((windowWidth / 2) + 1, (windowHeight / 2) + 1);
-			Vector2 ScreenLocation = new Vector2(0f, 0f);
-			if (WorldToScreen(TargetLocation, out ScreenLocation))
+			if (WorldToScreen(TargetLocation, out Vector2 ScreenLocation))
 			{
 				float X = ScreenLocation.X > Crosshair.X ? ScreenLocation.X - Crosshair.X : Crosshair.X - ScreenLocation.X;
 				float Y = ScreenLocation.Y > Crosshair.Y ? ScreenLocation.Y - Crosshair.Y : Crosshair.Y - ScreenLocation.Y;
@@ -613,19 +596,17 @@ namespace OverlaySample
 				return -1;
 			}
 		}
-
+		
 		private void GetLocalInfo(uint plistAddress)
 		{
 			uint player = M.Read<uint>(plistAddress);
 			if (player == 0) return;
 
 			G.MyLocation = M.Read<Vector3>(player + Offsets.VecOrigin);
-
-			uint pLocalPlayer = G.clientDLL + Offsets.dwLocalPlayer;
-			uint localplayer = M.Read<uint>(pLocalPlayer);
-			G.pLocalPlayer = localplayer;
-			G.MyTeam = M.Read<int>(localplayer + Offsets.TeamNum);
-			G.MyIndex = M.Read<int>(localplayer + Offsets.IndexOffset);
+			uint ppLocalPlayer = G.clientDLL + Offsets.dwLocalPlayer;
+			G.pLocalPlayer= M.Read<uint>(ppLocalPlayer);
+			G.MyTeam = M.Read<int>(G.pLocalPlayer + Offsets.TeamNum);
+			G.MyIndex = M.Read<int>(G.pLocalPlayer + Offsets.IndexOffset);
 		}
 
 		private void GetWeaponInfo()
@@ -637,59 +618,51 @@ namespace OverlaySample
 			G.MyWeaponType = GetWeaponType(G.WeaponID);
 			G.Clip1 = M.Read<int>(G.pWeapon + Offsets.Clip1);
 			G.ShotsFired = M.Read<int>(G.pLocalPlayer + Offsets.ShotsFired);
-
 		}
 
 		private Vector3 GetBonePos(uint bone, uint playerAddress)
 		{
 			uint plr_boneMatrix = M.Read<uint>(playerAddress + Offsets.BoneMatrix);
 			float[] bonepos = new float[3];
-			bonepos[0] = M.Read<float>(plr_boneMatrix + 0x30 * bone + 0x0C);
-			bonepos[1] = M.Read<float>(plr_boneMatrix + 0x30 * bone + 0x1C);
-			bonepos[2] = M.Read<float>(plr_boneMatrix + 0x30 * bone + 0x2C);
+			for (uint i = 0; i < 3; i++)
+				bonepos[i] = M.Read<float>(plr_boneMatrix + 0x30 * bone + (0x0C + (i * 0x10)));
 
 			return new Vector3(bonepos[0], bonepos[1], bonepos[2]);
 		}
-		bool WorldToScreen(Vector3 pos, out Vector2 screenpos)
+		bool WorldToScreen(Vector3 WorldLocation, out Vector2 ScreenPosition)
 		{
+			ScreenPosition = new Vector2(0, 0);
 			float w = 0.0f;
 
-			screenpos.X = vmatrix[0] * pos.X + vmatrix[1] * pos.Y + vmatrix[2] * pos.Z + vmatrix[3];
-			screenpos.Y = vmatrix[4] * pos.X + vmatrix[5] * pos.Y + vmatrix[6] * pos.Z + vmatrix[7];
+			ScreenPosition.X = viewMatrix.m0 * WorldLocation.X + viewMatrix.m1 * WorldLocation.Y + viewMatrix.m2 * WorldLocation.Z + viewMatrix.m3;
+			ScreenPosition.Y = viewMatrix.m4 * WorldLocation.X + viewMatrix.m5 * WorldLocation.Y + viewMatrix.m6 * WorldLocation.Z + viewMatrix.m7;
 
-			w = vmatrix[12] * pos.X + vmatrix[13] * pos.Y + vmatrix[14] * pos.Z + vmatrix[15];
+			w = viewMatrix.m12 * WorldLocation.X + viewMatrix.m13 * WorldLocation.Y + viewMatrix.m14 * WorldLocation.Z + viewMatrix.m15;
 
 			if (w < 0.01f)
 				return false;
 
-			screenpos.X *= (1.0f / w);
-			screenpos.Y *= (1.0f / w);
+			ScreenPosition.X *= (1.0f / w);
+			ScreenPosition.Y *= (1.0f / w);
+			
+			float x = windowWidth / 2;
+			float y = windowHeight / 2;
 
-			int width = (int)windowWidth;
-			int height = (int)windowHeight;
+			x += 0.5f * ScreenPosition.X * windowWidth + 0.5f;
+			y -= 0.5f * ScreenPosition.Y * windowHeight + 0.5f;
 
-			float x = width / 2;
-			float y = height / 2;
+			ScreenPosition.X = x;
+			ScreenPosition.Y = y;
 
-			x += 0.5f * screenpos.X * width + 0.5f;
-			y -= 0.5f * screenpos.Y * height + 0.5f;
-
-			screenpos.X = x;
-			screenpos.Y = y;
-
-			if (screenpos.X > width || screenpos.X < 0 || screenpos.Y > height || screenpos.Y < 0)
+			if (ScreenPosition.X > windowWidth || ScreenPosition.X < 0 || ScreenPosition.Y > windowHeight || ScreenPosition.Y < 0)
 				return false;
 
 			return true;
 		}
-
-
-
+		
 		//Recoil
 		public void GetRecoilCoords(out Vector2 recoil)
 		{
-			
-
 			float pX = VecPunch.X / Config.RecoilOffsetXhair; 
 			float pY = -(VecPunch.Y / Config.RecoilOffsetXhair);
 
@@ -699,7 +672,6 @@ namespace OverlaySample
 
 		public void ControlRecoil()
 		{
-
 			Vector3 punch = VecPunch - LastPunch;
 
 			float pX = punch.X / Config.RecoilOffset;
@@ -771,7 +743,7 @@ namespace OverlaySample
 							Config.visuals = !Config.visuals;
 							break;
 						case 1:
-							Config.trigger = !Config.trigger;
+							Config.triggerbot = !Config.triggerbot;
 							break;
 						case 2:
 							Config.RecoilOffsetXhair = Config.RecoilOffsetXhair  + 0.001f;
@@ -783,7 +755,7 @@ namespace OverlaySample
 							Config.smooth = Config.smooth + 0.5f;
 							break;
 						case 5:
-							Config.fov = Config.fov < 1000 ? Config.fov + 10 : 1000;
+							Config.FOV = Config.FOV < 1000 ? Config.FOV + 10 : 1000;
 							break;
 						
 
@@ -805,7 +777,7 @@ namespace OverlaySample
 							Config.visuals = !Config.visuals;
 							break;
 						case 1:
-							Config.trigger = !Config.trigger;
+							Config.triggerbot = !Config.triggerbot;
 							break;
 						case 2:
 							Config.RecoilOffsetXhair = Config.RecoilOffsetXhair > 0.001f ? Config.RecoilOffsetXhair - 0.001f : 0.001f;
@@ -817,7 +789,7 @@ namespace OverlaySample
 							Config.smooth = Config.smooth > 1 ? Config.smooth - 0.5f : 1;
 							break;
 						case 5:
-							Config.fov = Config.fov > 10 ? Config.fov - 10 : 10;
+							Config.FOV = Config.FOV > 10 ? Config.FOV - 10 : 10;
 							break;
 
 					}
@@ -909,11 +881,11 @@ namespace OverlaySample
 			string[] menuArray = new string[]
 			{
 				String.Format("Visuals: {0}", Config.visuals ? "(1)" : "(0)"),
-				String.Format("Trigger Bot: {0}", Config.trigger ? "(1)" : "(0)"),
+				String.Format("Trigger Bot: {0}", Config.triggerbot ? "(1)" : "(0)"),
 				String.Format("Recoil Xhair: ({0})", Config.RecoilOffsetXhair),
 				String.Format("Recoil Ctrl: ({0})", Config.RecoilOffset),
 				String.Format("Smoothing: ({0})", Config.smooth),
-				String.Format("Aim FOV: ({0})", Config.fov / 10)
+				String.Format("Aim FOV: ({0})", Config.FOV / 10)
 			};
 
 			string title = "Cole's Sample Project Menu";
@@ -1031,7 +1003,6 @@ namespace OverlaySample
 
 		private void DrawMarker(float X, float Y, int size, Brush color)
 		{
-
 			device.DrawLine(new Vector2(X - size / 2, Y), new Vector2(X + size / 2, Y), color);
 			device.DrawLine(new Vector2(X, Y - size / 2), new Vector2(X, Y + size / 2), color);
 		}

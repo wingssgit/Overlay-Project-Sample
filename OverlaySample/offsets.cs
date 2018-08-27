@@ -7,14 +7,13 @@ using System.Threading.Tasks;
 namespace OverlaySample
 {
 
-	//All offsets are generated dynamically via a separate module, the following declarations are old/unnecessary
+	//All offsets are generated dynamically via a separate module
 	public static class Offsets
 	{
-		public static uint dwEntityList = 0;//Retrieved via pattern scan
-		public static uint dwLocalPlayer = 0;//Retrieved via pattern scan
-		public static uint dwViewMatrix = 0;//Retrieved via pattern scan
-
-
+		public static uint dwEntityList = 0;
+		public static uint dwLocalPlayer = 0;
+		public static uint dwViewMatrix = 0;
+		
 		public static uint IndexOffset = 0x64;
 		public static uint BoneMatrix = 0x2698;
 		public static uint TeamNum = 0xF0;

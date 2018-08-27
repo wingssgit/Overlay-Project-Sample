@@ -22,22 +22,21 @@ namespace OverlaySample
 		private const uint IO_READ = 0x221C0C;
 		private const uint IO_MOD = 0x221C10;
 		
-		public IntPtr hDriver = IntPtr.Zero;
 
-		struct KReadRequest
+		private struct KReadRequest
 		{
 			public uint address;
 			public uint size;
 			public IntPtr bytes;
 		}
 		
-		struct KModRequest
+		private struct KModRequest
 		{
 			public uint BaseAddress;
 			public uint ModuleSize;
 		}
 		
-		public unsafe bool Init()
+		public bool Init()
 		{
 			G.Driver = Win32.CreateFile("\\\\.\\cdport64", FileAccess.ReadWrite, FileShare.ReadWrite, IntPtr.Zero, FileMode.Open, 0, IntPtr.Zero);
 			
@@ -61,8 +60,16 @@ namespace OverlaySample
 
 				uint[] offsets = new uint[16];
 				for (int i = 0; i < offsets.Length; i++)
+				{
+					if (offsets[i] == 0)
+					{
+						MessageBox.Show($"Failed to find offset[{i}]. Update required.");
+						Win32.FreeLibrary(pDll);
+						return false;
+					}
 					offsets[i] = getOffsets(G.Driver, i, G.clientDLL, G.clientSize);
 
+				}
 				Win32.FreeLibrary(pDll);
 
 				Offsets.dwEntityList = offsets[0];
@@ -94,7 +101,7 @@ namespace OverlaySample
 		}
 		
 
-		public uint GetBaseAddress()
+		private uint GetBaseAddress()
 		{
 			if (G.Driver == null || G.Driver == IntPtr.Zero)
 			{
@@ -115,10 +122,7 @@ namespace OverlaySample
 			uint NULL;
 			if (Win32.DeviceIoControl(G.Driver, IO_MOD, ptr, sizeRequest, ptr, sizeRequest, out NULL, IntPtr.Zero))
 			{
-				Marshal.Copy(ptr, reqbytes, 0, (int)sizeRequest);
-				var hbytes = GCHandle.Alloc(reqbytes, GCHandleType.Pinned);
 				var readReq = (KModRequest)Marshal.PtrToStructure(ptr, typeof(KModRequest));
-				hbytes.Free();
 				Marshal.FreeHGlobal(ptr);
 				G.clientSize = readReq.ModuleSize;
 				return readReq.BaseAddress;
@@ -165,7 +169,7 @@ namespace OverlaySample
 			}
 		}
 
-		public static T GetStructure<T>(byte[] bytes)
+		private static T GetStructure<T>(byte[] bytes)
 		{
 			var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
 			var structure = (T)Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof(T));
